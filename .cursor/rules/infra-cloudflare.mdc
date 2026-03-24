@@ -1,0 +1,42 @@
+---
+description: Rules for working in the infra-cloudflare Terraform repository
+globs:
+  - "**/*.tf"
+  - "**/*.tfvars"
+  - "**/*.yml"
+  - "**/*.yaml"
+  - "Makefile"
+alwaysApply: true
+---
+
+# infra-cloudflare Cursor Rules
+
+This repository is a multi-stack Terraform repo for Cloudflare infrastructure.
+
+## Core model
+
+- `stacks/<stack>/` are independent Terraform root modules
+- `modules/` contains shared Terraform modules
+- each stack has its own backend and state
+- do not treat the repository as a single Terraform root
+- use the `Makefile` as the default interface for Terraform operations
+
+## Working style
+
+- prefer minimal, targeted changes
+- identify whether the issue is stack-local or module-wide before editing
+- if editing a shared module, inspect every affected stack
+- if the issue is CI-only, suspect environment/config drift before redesigning Terraform
+
+## Repository conventions
+
+- GitHub Actions rules are defined separately in `.cursor/rules/github-workflows.mdc`
+- Terraform rules are defined separately in `.cursor/rules/terraform.mdc`
+- preserve existing naming and workflow conventions unless explicitly asked to change them
+
+## Safety baseline
+
+- do not leak secrets in logs or code
+- do not add debug dumps of environment variables
+- do not break stack boundaries
+- if local works but CI fails, inspect GitHub Environment and Terraform Cloud auth before assuming the Terraform code is wrong

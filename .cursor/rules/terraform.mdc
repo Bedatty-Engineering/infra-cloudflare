@@ -1,0 +1,118 @@
+---
+description: Terraform-specific rules for infra-cloudflare
+globs:
+  - "**/*.tf"
+  - "**/*.tfvars"
+alwaysApply: true
+---
+
+# Terraform Rules
+
+These rules apply when editing Terraform code in this repository.
+
+## Repository structure
+
+- `stacks/<stack>/` are Terraform root modules
+- `modules/` contains reusable shared modules
+- each stack has its own backend and state
+
+Do not treat the whole repository as a single Terraform root.
+
+## Change scope
+
+- prefer stack-local changes when the issue is stack-specific
+- if editing a shared module, inspect every affected stack
+- avoid broad refactors unless explicitly requested
+
+## Preferred commands
+
+Use the Makefile interface:
+
+```bash
+make init STACK=<stack>
+make validate STACK=<stack>
+make plan STACK=<stack>
+make apply STACK=<stack>
+```
+
+Avoid inventing new command patterns when the Makefile already covers the workflow.
+
+## Sensitive values
+
+Sensitive values must not be leaked through Terraform structure or CI output.
+
+Rules:
+
+- mark secret inputs with `sensitive = true`
+- do not use sensitive values directly in `for_each`
+- do not create outputs for tokens, secrets, or secret maps
+- if an output is sensitive, mark it with `sensitive = true`
+
+## Sensitive map iteration
+
+Correct pattern when iterating over a sensitive map:
+
+```hcl
+dynamic "secret_text_binding" {
+  for_each = nonsensitive(toset(keys(var.secrets)))
+  content {
+    name = secret_text_binding.value
+    text = var.secrets[secret_text_binding.value]
+  }
+}
+```
+
+Why:
+
+- iteration uses only non-sensitive keys
+- values remain sensitive
+
+Do not replace that with:
+
+```hcl
+for_each = var.secrets
+```
+
+or:
+
+```hcl
+for_each = nonsensitive(var.secrets)
+```
+
+unless explicitly requested and the sensitivity tradeoff is accepted.
+
+## CI vs local debugging
+
+If local Terraform works but CI fails:
+
+1. check GitHub Environment values for the stack
+2. check Terraform Cloud authentication
+3. check whether CI injects non-empty sensitive inputs that local runs did not have
+4. then inspect Terraform code
+
+Do not assume local `.env` proves CI configuration is correct.
+
+## Modules
+
+When editing modules:
+
+- preserve module input/output interfaces unless there is a good reason to change them
+- if outputs change, check all consuming stacks
+- if provider/resource compatibility changes, verify the pinned provider version used by the stacks
+
+## Outputs
+
+Before adding an output, ask:
+
+- is this non-sensitive?
+- is this actually needed by a stack or workflow?
+- could this leak operational detail into logs?
+
+Prefer fewer outputs over debug-heavy outputs.
+
+## Style
+
+- prefer minimal, explicit Terraform
+- follow existing naming and structure
+- preserve comments that explain important Terraform constraints
+- add concise comments only when the reasoning is not obvious
