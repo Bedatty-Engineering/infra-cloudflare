@@ -6,6 +6,10 @@ STACK_DIR  := $(STACKS_DIR)/$(STACK)
 ENV_FILE   := $(STACK_DIR)/.env
 LOAD_ENV   := if [ -f "$(ENV_FILE)" ]; then set -a; . "$(ENV_FILE)"; set +a; fi
 
+# Template stack for `make new-stack` (Worker + DNS layout).
+STACK_TEMPLATE     := $(STACKS_DIR)/profile
+STACK_TEMPLATE_NAME := profile
+
 .DEFAULT_GOAL := help
 
 .PHONY: _require_stack
@@ -26,9 +30,28 @@ help:
 list: ## List all available stacks
 	@ls -1 $(STACKS_DIR)/
 
+.PHONY: new-stack
+new-stack: ## Create stacks/<name> from stacks/profile (requires STACK=name)
+ifndef STACK
+	$(error STACK is required. Usage: make new-stack STACK=my-app)
+endif
+ifeq ($(STACK),$(STACK_TEMPLATE_NAME))
+	$(error STACK cannot be "$(STACK_TEMPLATE_NAME)" — pick a new stack name)
+endif
+	@test -d "$(STACK_TEMPLATE)" || (echo "Template stack not found: $(STACK_TEMPLATE)" >&2; exit 1)
+	@test ! -e "$(STACK_DIR)" || (echo "Already exists: $(STACK_DIR)" >&2; exit 1)
+	@mkdir -p "$(STACK_DIR)"
+	@cp "$(STACK_TEMPLATE)"/*.tf "$(STACK_DIR)/"
+	@test -f "$(STACK_TEMPLATE)/.env.example" && cp "$(STACK_TEMPLATE)/.env.example" "$(STACK_DIR)/" || true
+	@test -f "$(STACK_TEMPLATE)/.terraform.lock.hcl" && cp "$(STACK_TEMPLATE)/.terraform.lock.hcl" "$(STACK_DIR)/" || true
+	@sed -i 's/name = "$(STACK_TEMPLATE_NAME)"/name = "$(STACK)"/' "$(STACK_DIR)/backend.tf"
+	@sed -i 's/default[[:space:]]*=[[:space:]]*"$(STACK_TEMPLATE_NAME)"/default     = "$(STACK)"/' "$(STACK_DIR)/variables.tf"
+	@terraform fmt "$(STACK_DIR)" >/dev/null
+	@echo "Created $(STACK_DIR). Set TFC org/workspace in backend.tf if needed, copy .env.example to .env, then: make init STACK=$(STACK)"
+
 .PHONY: init
 init: _require_stack ## terraform init
-	terraform -chdir=$(STACK_DIR) init -upgrade
+	@$(LOAD_ENV); terraform -chdir=$(STACK_DIR) init -upgrade
 
 .PHONY: validate
 validate: _require_stack ## terraform validate
