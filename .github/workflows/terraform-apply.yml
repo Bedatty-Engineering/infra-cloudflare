@@ -8,6 +8,11 @@ on:
       - "stacks/**"
       - "modules/**"
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 concurrency:
   group: terraform-apply
   cancel-in-progress: false # never cancel an in-flight apply
@@ -15,9 +20,6 @@ concurrency:
 env:
   TF_VERSION: "1.7.5"
   TF_CLI_ARGS: "-no-color"
-  # TF_TOKEN authenticates with Terraform Cloud for remote state storage.
-  # Workspaces must be set to "Local" execution mode so TF_VAR_* is picked up.
-  TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
 
 jobs:
   detect-changes:
@@ -65,6 +67,9 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: website-${{ matrix.stack }}
+    env:
+      # This must be job-scoped so it can read the stack-specific environment secret.
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -78,6 +83,14 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Check Terraform Cloud token
+        run: |
+          if [ -z "${TF_TOKEN_app_terraform_io}" ]; then
+            echo "TF_TOKEN_app_terraform_io is not set for environment website-${{ matrix.stack }}"
+            exit 1
+          fi
+          echo "Terraform Cloud token is present for website-${{ matrix.stack }}"
 
       - name: Terraform Init
         run: make init STACK=${{ matrix.stack }}
