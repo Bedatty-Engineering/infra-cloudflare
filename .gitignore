@@ -1,0 +1,40 @@
+# ---------------------------------------------------------------------------
+# Terraform – generated directories and local state
+# ---------------------------------------------------------------------------
+
+# Provider binaries and module cache (downloaded by terraform init)
+**/.terraform/
+
+# Local state files (remote state is stored in Terraform Cloud)
+*.tfstate
+*.tfstate.*
+
+# Plan output files
+*.tfplan
+tfplan
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Override files (local-only overrides, never shared)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# tfvars may contain secrets – commit only the .example counterpart
+*.tfvars
+!*.tfvars.example
+
+# .env may contain secrets – commit only the .example counterpart
+.env
+!.env.example
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo

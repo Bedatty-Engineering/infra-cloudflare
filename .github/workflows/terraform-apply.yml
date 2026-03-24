@@ -1,0 +1,108 @@
+name: Terraform Apply
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "stacks/**"
+      - "modules/**"
+
+concurrency:
+  group: terraform-apply
+  cancel-in-progress: false # never cancel an in-flight apply
+
+env:
+  TF_VERSION: "1.7.5"
+  TF_CLI_ARGS: "-no-color"
+  # TF_TOKEN authenticates with Terraform Cloud for remote state storage.
+  # Workspaces must be set to "Local" execution mode so TF_VAR_* is picked up.
+  TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+
+jobs:
+  detect-changes:
+    name: Detect changed stacks
+    runs-on: ubuntu-latest
+    outputs:
+      stacks: ${{ steps.changed.outputs.stacks }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed stack directories
+        id: changed
+        run: |
+          CHANGED=$(git diff --name-only HEAD~1 HEAD \
+            | grep -E '^(stacks|modules)/' \
+            | awk -F'/' '{print $2}' \
+            | sort -u \
+            | grep -v '^$' || true)
+
+          MODULES_CHANGED=$(git diff --name-only HEAD~1 HEAD \
+            | grep -E '^modules/' | head -1 || true)
+
+          if [ -n "$MODULES_CHANGED" ]; then
+            echo "Module changes detected - applying all stacks"
+            STACKS=$(ls stacks/ | jq -R . | jq -sc .)
+          else
+            if [ -z "$CHANGED" ]; then
+              echo "No stack changes detected"
+              STACKS="[]"
+            else
+              STACKS=$(echo "$CHANGED" | jq -R . | jq -sc .)
+            fi
+          fi
+
+          echo "Stacks to apply: $STACKS"
+          echo "stacks=$STACKS" >> "$GITHUB_OUTPUT"
+
+  apply:
+    name: Apply · ${{ matrix.stack }}
+    needs: detect-changes
+    if: needs.detect-changes.outputs.stacks != '[]'
+    runs-on: ubuntu-latest
+    environment: production
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: ${{ fromJson(needs.detect-changes.outputs.stacks) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: make init STACK=${{ matrix.stack }}
+
+      - name: Terraform Apply
+        env:
+          # Secrets from the "production" GitHub Environment
+          TF_VAR_cloudflare_api_token:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_cloudflare_zone_id:    ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          # Non-sensitive environment variables
+          TF_VAR_domain: ${{ vars.DOMAIN }}
+        run: make apply-auto STACK=${{ matrix.stack }}
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        env:
+          STACK: ${{ matrix.stack }}
+        with:
+          script: |
+            const stack = process.env.STACK;
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Terraform Apply failed for \`${stack}\``,
+              body: `The apply job for stack **${stack}** failed on commit ${context.sha}.\n\nSee the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`,
+              labels: ['terraform', 'incident']
+            });
