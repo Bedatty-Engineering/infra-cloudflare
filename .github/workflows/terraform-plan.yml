@@ -67,10 +67,10 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.stacks != '[]'
     runs-on: ubuntu-latest
-    # environment: required so this job can read secrets stored in the
-    # "production" GitHub Environment (environment secrets are only
-    # accessible when the job declares the environment).
-    environment: production
+    # Each stack reads its own GitHub Environment, e.g. stack "profile"
+    # uses environment "website-profile".
+    environment:
+      name: website-${{ matrix.stack }}
     strategy:
       fail-fast: false
       matrix:
@@ -94,11 +94,10 @@ jobs:
       - name: Terraform Plan
         id: plan
         env:
-          # Secrets from the "production" GitHub Environment
+          # Secrets and vars come from the stack-specific GitHub Environment.
           TF_VAR_cloudflare_api_token:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
           TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_cloudflare_zone_id:    ${{ secrets.CLOUDFLARE_ZONE_ID }}
-          # Non-sensitive environment variables
           TF_VAR_domain: ${{ vars.DOMAIN }}
         run: make plan STACK=${{ matrix.stack }}
         continue-on-error: true

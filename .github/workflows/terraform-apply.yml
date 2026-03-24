@@ -63,7 +63,8 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.stacks != '[]'
     runs-on: ubuntu-latest
-    environment: production
+    environment:
+      name: website-${{ matrix.stack }}
     strategy:
       fail-fast: false
       matrix:
@@ -83,11 +84,10 @@ jobs:
 
       - name: Terraform Apply
         env:
-          # Secrets from the "production" GitHub Environment
+          # Secrets and vars come from the stack-specific GitHub Environment.
           TF_VAR_cloudflare_api_token:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
           TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_cloudflare_zone_id:    ${{ secrets.CLOUDFLARE_ZONE_ID }}
-          # Non-sensitive environment variables
           TF_VAR_domain: ${{ vars.DOMAIN }}
         run: make apply-auto STACK=${{ matrix.stack }}
 
