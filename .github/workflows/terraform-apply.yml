@@ -8,6 +8,11 @@ on:
       - "stacks/**"
       - "modules/**"
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 concurrency:
   group: terraform-apply
   cancel-in-progress: false # never cancel an in-flight apply
@@ -15,9 +20,6 @@ concurrency:
 env:
   TF_VERSION: "1.7.5"
   TF_CLI_ARGS: "-no-color"
-  # TF_TOKEN authenticates with Terraform Cloud for remote state storage.
-  # Workspaces must be set to "Local" execution mode so TF_VAR_* is picked up.
-  TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
 
 jobs:
   detect-changes:
@@ -63,7 +65,11 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.stacks != '[]'
     runs-on: ubuntu-latest
-    environment: production
+    environment:
+      name: website-${{ matrix.stack }}
+    env:
+      # This must be job-scoped so it can read the stack-specific environment secret.
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -73,21 +79,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Mask sensitive values
+        env:
+          TF_TOKEN: ${{ secrets.TF_API_TOKEN }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          echo "::add-mask::$TF_TOKEN"
+          echo "::add-mask::$CF_API_TOKEN"
+          echo "::add-mask::$CF_ACCOUNT_ID"
+          echo "::add-mask::$CF_ZONE_ID"
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Check Terraform Cloud token
+        run: |
+          if [ -z "${TF_TOKEN_app_terraform_io}" ]; then
+            echo "TF_TOKEN_app_terraform_io is not set for environment website-${{ matrix.stack }}"
+            exit 1
+          fi
+          echo "Terraform Cloud token is present for website-${{ matrix.stack }}"
 
       - name: Terraform Init
         run: make init STACK=${{ matrix.stack }}
 
       - name: Terraform Apply
         env:
-          # Secrets from the "production" GitHub Environment
+          # Secrets and vars come from the stack-specific GitHub Environment.
           TF_VAR_cloudflare_api_token:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
           TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_cloudflare_zone_id:    ${{ secrets.CLOUDFLARE_ZONE_ID }}
-          # Non-sensitive environment variables
           TF_VAR_domain: ${{ vars.DOMAIN }}
         run: make apply-auto STACK=${{ matrix.stack }}
 

@@ -28,10 +28,11 @@ resource "cloudflare_workers_script" "this" {
   }
 
   dynamic "secret_text_binding" {
-    for_each = var.secrets
+    # Iterate only over non-sensitive keys; values remain sensitive.
+    for_each = nonsensitive(toset(keys(var.secrets)))
     content {
-      name = secret_text_binding.key
-      text = secret_text_binding.value
+      name = secret_text_binding.value
+      text = var.secrets[secret_text_binding.value]
     }
   }
 

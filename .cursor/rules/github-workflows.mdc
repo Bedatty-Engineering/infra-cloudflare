@@ -1,0 +1,103 @@
+---
+description: Rules for GitHub Actions workflows in infra-cloudflare
+globs:
+  - ".github/workflows/*.yml"
+  - ".github/workflows/*.yaml"
+alwaysApply: true
+---
+
+# GitHub Actions Rules
+
+These rules apply when editing GitHub Actions workflows in this repository.
+
+## Workflow model
+
+- `terraform-plan.yml` runs on pull requests
+- `terraform-apply.yml` runs on pushes to `main`
+- stack selection is based on changed paths
+- changes under `stacks/<stack>/` affect that stack
+- changes under `modules/` affect all stacks
+- plan/apply must run as a matrix with one job per stack
+
+Do not collapse stack execution into a single non-matrix Terraform run unless explicitly asked.
+
+## Environment mapping
+
+Each matrix job must use the GitHub Environment:
+
+- `website-${{ matrix.stack }}`
+
+Do not hardcode a shared environment like `production` unless explicitly asked.
+
+## Secret handling
+
+Sensitive values must come from GitHub Environment secrets.
+
+Expected secrets:
+
+- `TF_API_TOKEN`
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_ZONE_ID`
+
+Expected non-sensitive variable:
+
+- `DOMAIN`
+
+Rules:
+
+- keep `TF_TOKEN_app_terraform_io` job-scoped when it depends on `matrix.stack`
+- use `secrets.*` for sensitive values
+- use `vars.*` only for non-sensitive values
+- never print secret values
+- never add `env`, `printenv`, `set`, or similar dump steps
+
+## Terraform execution
+
+Prefer:
+
+```bash
+make init STACK=${{ matrix.stack }}
+make validate STACK=${{ matrix.stack }}
+make plan STACK=${{ matrix.stack }}
+make apply-auto STACK=${{ matrix.stack }}
+```
+
+Do not replace these with a repo-wide Terraform invocation unless explicitly requested.
+
+## Permissions
+
+When workflows interact with PRs or issues, declare explicit permissions.
+
+Current minimum expected permissions:
+
+```yaml
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+```
+
+## PR comments and notifications
+
+- PR comment/reporting steps should not be able to fail the entire plan job
+- if posting comments can fail due to GitHub token restrictions, prefer `continue-on-error: true`
+- warning-only behavior is preferred for non-critical reporting steps
+
+## Terraform Cloud auth
+
+If `terraform init` fails in CI with `unauthorized`:
+
+- first check environment secret scoping
+- then check the Terraform Cloud token access
+- do not assume local `.env` values explain the problem
+
+## Safety checklist
+
+Before finishing a workflow change, verify:
+
+- matrix behavior still works
+- `website-${{ matrix.stack }}` is still used
+- secrets are not printed
+- `make ... STACK=${{ matrix.stack }}` is still the execution path
+- non-critical PR comment steps do not break core Terraform execution

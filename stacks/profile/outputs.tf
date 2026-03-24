@@ -27,3 +27,4 @@ output "dns_records" {
   description = "DNS hostnames managed by this stack"
   value       = module.dns.record_hostnames
 }
+

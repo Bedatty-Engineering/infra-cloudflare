@@ -8,6 +8,11 @@ on:
       - "stacks/**"
       - "modules/**"
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 concurrency:
   group: terraform-plan-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -15,10 +20,6 @@ concurrency:
 env:
   TF_VERSION: "1.7.5"
   TF_CLI_ARGS: "-no-color"
-  # TF_TOKEN authenticates with Terraform Cloud for remote state storage.
-  # The workspaces must be set to "Local" execution mode in TFC so that
-  # plan/apply runs on this runner and TF_VAR_* variables are picked up.
-  TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
 
 jobs:
   detect-changes:
@@ -67,10 +68,13 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.stacks != '[]'
     runs-on: ubuntu-latest
-    # environment: required so this job can read secrets stored in the
-    # "production" GitHub Environment (environment secrets are only
-    # accessible when the job declares the environment).
-    environment: production
+    # Each stack reads its own GitHub Environment, e.g. stack "profile"
+    # uses environment "website-profile".
+    environment:
+      name: website-${{ matrix.stack }}
+    env:
+      # This must be job-scoped so it can read the stack-specific environment secret.
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -80,10 +84,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Mask sensitive values
+        env:
+          TF_TOKEN: ${{ secrets.TF_API_TOKEN }}
+          CF_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          echo "::add-mask::$TF_TOKEN"
+          echo "::add-mask::$CF_API_TOKEN"
+          echo "::add-mask::$CF_ACCOUNT_ID"
+          echo "::add-mask::$CF_ZONE_ID"
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Check Terraform Cloud token
+        run: |
+          if [ -z "${TF_TOKEN_app_terraform_io}" ]; then
+            echo "TF_TOKEN_app_terraform_io is not set for environment website-${{ matrix.stack }}"
+            exit 1
+          fi
+          echo "Terraform Cloud token is present for website-${{ matrix.stack }}"
 
       - name: Terraform Init
         run: make init STACK=${{ matrix.stack }}
@@ -94,11 +118,10 @@ jobs:
       - name: Terraform Plan
         id: plan
         env:
-          # Secrets from the "production" GitHub Environment
+          # Secrets and vars come from the stack-specific GitHub Environment.
           TF_VAR_cloudflare_api_token:  ${{ secrets.CLOUDFLARE_API_TOKEN }}
           TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_cloudflare_zone_id:    ${{ secrets.CLOUDFLARE_ZONE_ID }}
-          # Non-sensitive environment variables
           TF_VAR_domain: ${{ vars.DOMAIN }}
         run: make plan STACK=${{ matrix.stack }}
         continue-on-error: true
@@ -106,6 +129,7 @@ jobs:
       - name: Post plan summary to PR
         uses: actions/github-script@v7
         if: always()
+        continue-on-error: true
         env:
           PLAN_OUTCOME: ${{ steps.plan.outcome }}
           STACK: ${{ matrix.stack }}
@@ -115,12 +139,16 @@ jobs:
             const stack = process.env.STACK;
             const icon = outcome === 'success' ? '✅' : '❌';
             const body = `### ${icon} Terraform Plan · \`${stack}\`\n\nPlan **${outcome}**. See the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for full output.`;
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body
-            });
+            try {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body
+              });
+            } catch (error) {
+              core.warning(`Failed to post PR comment: ${error.message}`);
+            }
 
       - name: Fail if plan failed
         if: steps.plan.outcome == 'failure'
