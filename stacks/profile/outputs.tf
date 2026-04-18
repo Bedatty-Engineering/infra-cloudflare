@@ -8,18 +8,13 @@ output "worker_id" {
   value       = module.worker.worker_id
 }
 
-output "worker_routes" {
-  description = "Cloudflare Worker route IDs"
-  value       = module.worker.route_ids
-}
-
 output "custom_domain" {
-  description = "Primary hostname (Workers Custom Domain when use_workers_custom_domain is true)"
+  description = "Primary hostname (Workers Custom Domain)"
   value       = var.domain
 }
 
 output "workers_custom_domain_ids" {
-  description = "Cloudflare Workers Custom Domain resource IDs (empty when use_workers_custom_domain is false)"
+  description = "Cloudflare Workers Custom Domain resource IDs"
   value       = module.worker.custom_domain_ids
 }
 

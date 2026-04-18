@@ -39,23 +39,6 @@ variable "compatibility_flags" {
   default     = ["nodejs_compat"]
 }
 
-
-variable "use_workers_custom_domain" {
-  description = <<-EOT
-    When true, attaches var.domain via Cloudflare Workers Custom Domains (DNS + cert
-    managed by Cloudflare). No workers_route or proxied dummy DNS record is used for
-    that hostname. Set false to use the legacy pattern: workers_route + proxied A/CNAME.
-  EOT
-  type        = bool
-  default     = true
-}
-
-variable "route_patterns" {
-  description = "Optional explicit Worker route patterns (only used when use_workers_custom_domain is false)"
-  type        = list(string)
-  default     = []
-}
-
 variable "environment_variables" {
   description = "Environment variables"
   type        = map(string)
@@ -66,24 +49,6 @@ variable "logpush_enabled" {
   description = "Whether to enable Logpush"
   type        = bool
   default     = false
-}
-
-variable "create_worker_dns_record" {
-  description = "Whether to create the proxied DNS record"
-  type        = bool
-  default     = true
-}
-
-variable "worker_dns_record_type" {
-  description = "DNS record type"
-  type        = string
-  default     = "A"
-}
-
-variable "worker_dns_record_content" {
-  description = "Placeholder DNS record content"
-  type        = string
-  default     = "192.0.2.1"
 }
 
 variable "extra_dns_records" {

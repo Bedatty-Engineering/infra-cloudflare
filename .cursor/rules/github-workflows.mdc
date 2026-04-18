@@ -12,6 +12,7 @@ These rules apply when editing GitHub Actions workflows in this repository.
 
 ## Workflow model
 
+- `terraform-plan.yml` and `terraform-apply.yml` here are thin callers; implementation is **Bedatty-Engineering/modules-hub** `.github/workflows/terraform/plan.yml` and `apply.yml` (actions under `composite/terraform/<name>/`).
 - `terraform-plan.yml` runs on pull requests
 - `terraform-apply.yml` runs on pushes to `main`
 - stack selection is based on changed paths

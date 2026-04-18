@@ -1,4 +1,7 @@
-# AGENTS.md
+<table><tr>
+<td><img src="https://github.com/Bedatty-Engineering.png" alt="Bedatty Engineering" width="80" /></td>
+<td><h1>AGENTS.md</h1></td>
+</tr></table>
 
 This file is only for AI coding agents working in this repository.
 
@@ -45,8 +48,8 @@ Avoid raw `terraform` commands unless needed for debugging.
 
 GitHub Actions runs per changed stack.
 
-- PR workflow: `.github/workflows/terraform-plan.yml`
-- Push workflow: `.github/workflows/terraform-apply.yml`
+- PR workflow: `.github/workflows/terraform-plan.yml` → `Bedatty-Engineering/modules-hub/.github/workflows/terraform/plan.yml`
+- Push workflow: `.github/workflows/terraform-apply.yml` → `Bedatty-Engineering/modules-hub/.github/workflows/terraform/apply.yml`
 - changes under `stacks/<stack>/` select that stack
 - changes under `modules/` expand to all stacks
 - jobs run as a matrix, one job per stack
