@@ -1,4 +1,7 @@
-# infra-cloudflare
+<table><tr>
+<td><img src="https://github.com/Bedatty-Engineering.png" alt="Bedatty Engineering" width="80" /></td>
+<td><h1>infra-cloudflare</h1></td>
+</tr></table>
 
 Terraform repository for Cloudflare infrastructure. The layout uses **multiple independent stacks** (each with its own state and scope), sharing **modules** where it makes sense.
 
@@ -22,7 +25,7 @@ Each stack configures the Cloudflare provider in `stacks/<stack>/providers.tf`. 
 
 ## CI and Environments
 
-This repository uses GitHub Actions with one GitHub Environment per stack.
+This repository uses GitHub Actions with one GitHub Environment per stack. Terraform **plan** and **apply** call reusable workflows in [**Bedatty-Engineering/modules-hub**](https://github.com/Bedatty-Engineering/modules-hub) (`.github/workflows/terraform/plan.yml` and `apply.yml`); only triggers, path filters, and `secrets: inherit` live in this repo.
 
 Environment naming convention:
 
